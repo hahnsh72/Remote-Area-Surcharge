@@ -12,15 +12,17 @@ df_data.columns = [
 ]
 df_data = df_data[["Country", "City", "BeginPostal", "EndPostal", "ODA_IPS", "ODA_IFS"]]
 
-# --- Define rules: which countries use city vs postal ---
-# Example: adjust this dictionary with your business logic
-country_rules = {
-    "france": "postal",   # France uses postal code
-    "japan": "city",      # Japan uses city
-    "germany": "postal",  # Germany uses postal code
-    "italy": "city",      # Italy uses city
-    # Add more as needed...
-}
+# --- Auto-generate rules from dataset ---
+country_rules = {}
+for country, group in df_data.groupby(df_data["Country"].str.lower()):
+    has_postal = group["BeginPostal"].notna().any() and group["EndPostal"].notna().any()
+    has_city = group["City"].notna().any()
+    if has_postal:
+        country_rules[country] = "postal"
+    elif has_city:
+        country_rules[country] = "city"
+    else:
+        country_rules[country] = "unknown"
 
 # --- Define function ---
 def surcharge_applicable(country: str, city: str = None, postal_code: str = None) -> str:
@@ -34,7 +36,7 @@ def surcharge_applicable(country: str, city: str = None, postal_code: str = None
     if df_country.empty:
         return "No"
 
-    rule = country_rules.get(country, "postal")  # default to postal if not defined
+    rule = country_rules.get(country, "unknown")
 
     if rule == "city" and city:
         df_city = df_country[df_country["City"].str.lower() == city]
@@ -55,13 +57,13 @@ st.title("FedEx Remote Area Surcharge Checker")
 
 st.write("Enter a **country**. Depending on the country, you will be asked to enter either a **city** or a **postal code**.")
 
-country = st.text_input("Country").strip().lower()
+# Optional: dropdown of countries from file instead of free text
+all_countries = sorted(df_data["Country"].dropna().unique())
+country = st.selectbox("Country", options=[""] + list(all_countries))
 
-rule = country_rules.get(country, None)
+if country:
+    rule = country_rules.get(country.lower(), "unknown")
 
-if not country:
-    st.info("Please enter a country.")
-else:
     if rule == "city":
         city = st.text_input("City")
         postal_code = None
@@ -69,15 +71,15 @@ else:
         postal_code = st.text_input("Postal Code")
         city = None
     else:
-        st.warning("This country is not configured in rules. Defaulting to postal code.")
-        postal_code = st.text_input("Postal Code")
-        city = None
+        st.warning("This country has no city or postal data in the file.")
+        city = postal_code = None
 
     if st.button("Check Surcharge"):
         result = surcharge_applicable(country, city, postal_code)
         st.success(f"Surcharge applicable? **{result}**")
-
-
+else:
+    st.info("Please select a country.")
 
         st.success(f"Surcharge applicable? **{result}**")
+
 
