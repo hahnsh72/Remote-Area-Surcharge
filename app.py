@@ -12,9 +12,9 @@ df_data.columns = [
 ]
 df_data = df_data[["Country", "City", "BeginPostal", "EndPostal", "ODA_IPS", "ODA_IFS"]]
 
-# --- Auto-generate rules from dataset ---
+# --- Detect rules automatically ---
 country_rules = {}
-for country, group in df_data.groupby(df_data["Country"].str.lower()):
+for country, group in df_data.groupby(df_data["Country"].str.strip().str.lower()):
     has_postal = group["BeginPostal"].notna().any() and group["EndPostal"].notna().any()
     has_city = group["City"].notna().any()
     if has_postal:
@@ -24,7 +24,7 @@ for country, group in df_data.groupby(df_data["Country"].str.lower()):
     else:
         country_rules[country] = "unknown"
 
-# --- Define function ---
+# --- Core function ---
 def surcharge_applicable(country: str, city: str = None, postal_code: str = None) -> str:
     country = country.strip().lower()
     if city:
@@ -32,14 +32,14 @@ def surcharge_applicable(country: str, city: str = None, postal_code: str = None
     if postal_code:
         postal_code = str(postal_code).strip()
 
-    df_country = df_data[df_data["Country"].str.lower() == country]
+    df_country = df_data[df_data["Country"].str.strip().str.lower() == country]
     if df_country.empty:
         return "No"
 
     rule = country_rules.get(country, "unknown")
 
     if rule == "city" and city:
-        df_city = df_country[df_country["City"].str.lower() == city]
+        df_city = df_country[df_country["City"].str.strip().str.lower() == city]
         if not df_city.empty and (df_city["ODA_IPS"].notna().any() or df_city["ODA_IFS"].notna().any()):
             return "Yes"
 
@@ -53,16 +53,15 @@ def surcharge_applicable(country: str, city: str = None, postal_code: str = None
     return "No"
 
 # --- Streamlit UI ---
-st.title("FedEx Remote Area Surcharge Checker")
+st.title("FedEx International Out-of-Delivery Area (ODA) Checker")
 
-st.write("Enter a **country**. Depending on the country, you will be asked to enter either a **city** or a **postal code**.")
+st.write("Select a **country**. Depending on the country, you will be asked to enter either a **city** or a **postal code**.")
 
-# Optional: dropdown of countries from file instead of free text
 all_countries = sorted(df_data["Country"].dropna().unique())
 country = st.selectbox("Country", options=[""] + list(all_countries))
 
 if country:
-    rule = country_rules.get(country.lower(), "unknown")
+    rule = country_rules.get(country.strip().lower(), "unknown")
 
     if rule == "city":
         city = st.text_input("City")
@@ -71,7 +70,7 @@ if country:
         postal_code = st.text_input("Postal Code")
         city = None
     else:
-        st.warning("This country has no city or postal data in the file.")
+        st.warning("This country has no clear rule (no city or postal code data found).")
         city = postal_code = None
 
     if st.button("Check Surcharge"):
@@ -80,6 +79,6 @@ if country:
 else:
     st.info("Please select a country.")
 
-        st.success(f"Surcharge applicable? **{result}**")
+
 
 
